@@ -1,0 +1,39 @@
+{
+  "ELECTION_REQUEST": {
+    "type": "object",
+    "properties": {
+      "candidate_id": {"type": "string"},
+      "term": {"type": "integer"},
+      "last_state_ts": {"type": "number"}
+    },
+    "required": ["candidate_id", "term", "last_state_ts"]
+  },
+  "ELECTION_VOTE": {
+    "type": "object",
+    "properties": {
+      "voter_id": {"type": "string"},
+      "term": {"type": "integer"},
+      "vote_granted": {"type": "boolean"}
+    },
+    "required": ["voter_id", "term", "vote_granted"]
+  },
+  "CHECKPOINT_PROPOSE": {
+    "type": "object",
+    "properties": {
+      "checkpoint_id": {"type": "integer"},
+      "term": {"type": "integer"},
+      "state_digest": {"type": "string"},
+      "timestamp": {"type": "number"}
+    },
+    "required": ["checkpoint_id", "term", "state_digest", "timestamp"]
+  },
+  "CHECKPOINT_ACK": {
+    "type": "object",
+    "properties": {
+      "follower_id": {"type": "string"},
+      "checkpoint_id": {"type": "integer"},
+      "term": {"type": "integer"}
+    },
+    "required": ["follower_id", "checkpoint_id", "term"]
+  }
+}
