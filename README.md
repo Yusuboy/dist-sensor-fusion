@@ -8,7 +8,7 @@ Each node:
 - Maintains a **shared global state** containing the latest readings from all nodes.
 - Participates in **leader election** and **checkpoint agreement** to ensure consensus.
 
-The prototype runs on **three nodes**, but the design scales to many nodes worldwide.
+The prototype runs on **three nodes**, but the design scales to many nodes.
 
 ---
 
