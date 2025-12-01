@@ -1,0 +1,16 @@
+import time
+from src.core.state import GlobalState, SensorValue
+
+def test_merge_last_writer_wins():
+    gs = GlobalState("A")
+    gs.update_local(25.0)
+
+    # Incoming older update should be ignored
+    old_update = {"A": {"value": 30.0, "timestamp": gs.state["A"].timestamp - 10}}
+    gs.merge(old_update)
+    assert gs.state["A"].value == 25.0
+
+    # Incoming newer update should overwrite
+    new_update = {"A": {"value": 28.0, "timestamp": time.time() + 10}}
+    gs.merge(new_update)
+    assert gs.state["A"].value == 28.0
