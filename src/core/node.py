@@ -1,10 +1,10 @@
 import asyncio
 import random
 import time
-from core.state import GlobalState
-from net.server import Server
-from net.client import send_message
-from proto.messages import SensorUpdate
+from src.core.state import GlobalState
+from src.net.server import Server
+from src.net.client import send_message
+from src.proto.messages import SensorUpdate
 
 class Node:
     def __init__(self, node_id: str, host: str, port: int, peers: list[str]):

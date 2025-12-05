@@ -56,3 +56,33 @@ def to_json(msg) -> str:
 
 def from_json(msg_type, data: str):
     return msg_type(**json.loads(data))
+
+
+
+@dataclass
+class Heartbeat:
+    leader_id: str
+    term: int
+    timestamp: float
+
+def heartbeat(leader_id: str, term: int) -> dict:
+    return Heartbeat(leader_id=leader_id, term=term, timestamp=time.time()).__dict__
+
+@dataclass
+class RequestVote:
+    candidate_id: str
+    term: int
+    timestamp: float
+
+def request_vote(candidate_id: str, term: int) -> dict:
+    return RequestVote(candidate_id=candidate_id, term=term, timestamp=time.time()).__dict__
+
+@dataclass
+class VoteResponse:
+    voter_id: str
+    term: int
+    granted: bool
+    timestamp: float
+
+def vote_response(voter_id: str, term: int, granted: bool) -> dict:
+    return VoteResponse(voter_id=voter_id, term=term, granted=granted, timestamp=time.time()).__dict__
