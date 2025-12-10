@@ -12,16 +12,17 @@ class SensorUpdate:
     value: float
     timestamp: float
 
+def sensor_update(node_id: str, value: float) -> dict:
+    return {
+        "node_id": node_id,
+        "value": value,
+        "timestamp": time.time(),
+    }
+
 @dataclass
 class StateUpdate:
     state_map: dict
     checkpoint_id: int | None = None
-
-@dataclass
-class Heartbeat:
-    leader_id: str
-    term: int
-    timestamp: float
 
 # --- Leader election messages ---
 @dataclass
@@ -66,17 +67,28 @@ class Heartbeat:
     timestamp: float
 
 def heartbeat(leader_id: str, term: int) -> dict:
-    return Heartbeat(leader_id=leader_id, term=term, timestamp=time.time()).__dict__
+    return {
+        "leader_id": leader_id,
+        "term": term,
+        "timestamp": time.time(),
+    }
 
 @dataclass
 class RequestVote:
     candidate_id: str
     term: int
+    candidate_host: str
+    candidate_port: int
     timestamp: float
 
-def request_vote(candidate_id: str, term: int) -> dict:
-    return RequestVote(candidate_id=candidate_id, term=term, timestamp=time.time()).__dict__
-
+def request_vote(candidate_id: str, term: int, candidate_host: str, candidate_port: int) -> dict:
+    return {
+        "candidate_id": candidate_id,
+        "term": term,
+        "candidate_host": candidate_host,
+        "candidate_port": candidate_port,
+        "timestamp": time.time(),
+    }
 @dataclass
 class VoteResponse:
     voter_id: str
@@ -85,4 +97,29 @@ class VoteResponse:
     timestamp: float
 
 def vote_response(voter_id: str, term: int, granted: bool) -> dict:
-    return VoteResponse(voter_id=voter_id, term=term, granted=granted, timestamp=time.time()).__dict__
+    return {
+        "voter_id": voter_id,
+        "term": term,
+        "granted": granted,
+        "timestamp": time.time(),
+    }
+
+def append_entries_msg(term, leader_id, prev_log_index, prev_log_term, entries, leader_commit):
+    return {
+        "type": "APPEND_ENTRIES",
+        "term": term,
+        "leader_id": leader_id,
+        "prev_log_index": prev_log_index,
+        "prev_log_term": prev_log_term,
+        "entries": entries,  # list of {"index": int, "term": int, "command": Any}
+        "leader_commit": leader_commit,
+    }
+
+def append_entries_resp(success, term, follower_id, match_index):
+    return {
+        "type": "APPEND_ENTRIES_RESP",
+        "term": term,
+        "follower_id": follower_id,
+        "success": success,
+        "match_index": match_index,  # last index the follower has replicated
+    }

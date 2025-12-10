@@ -5,13 +5,13 @@ from typing import Optional
 from src.core.state import GlobalState
 from src.net.server import Server
 from src.net.client import send_message
-from src.proto.messages import SensorUpdate, request_vote, vote_response, heartbeat
+from src.proto.messages import SensorUpdate, sensor_update, request_vote, vote_response, heartbeat
 
 ROLE_FOLLOWER = "follower"
 ROLE_CANDIDATE = "candidate"
 ROLE_LEADER = "leader"
 
-def random_timeout(base: float = 2.0, jitter: float = 1.0) -> float:
+def random_timeout(base: float = 2.5, jitter: float = 2.0) -> float:
     return base + random.random() * jitter
 
 class Node:
@@ -27,7 +27,7 @@ class Node:
         self.term = 0
         self.voted_for: Optional[str] = None
         self.last_heartbeat = time.time()
-        self.election_timeout = random_timeout(2.0, 1.5)  # ~2–3.5s
+        self.election_timeout = random_timeout(2.5, 2.0)
         self.votes_received = set()
 
         # Concurrency primitives
@@ -44,23 +44,19 @@ class Node:
         print(f"Node {self.node_id} started on {self.host}:{self.port} (role={self.role}, term={self.term})")
         await self._stop.wait()
 
-
     async def sensor_loop(self):
-        while True:
+        while not self._stop.is_set():
             # Simulate sensor reading
             value = random.uniform(20.0, 30.0)
             self.state.update_local(value)
 
-            msg = SensorUpdate(
-                node_id=self.node_id,
-                value=value,
-                timestamp=time.time()
-            )
-
-            # Broadcast to peers
+            # Broadcast to peers (skip self)
+            payload = sensor_update(self.node_id, value)
             for peer in self.peers:
                 host, port = peer.split(":")
-                asyncio.create_task(send_message(host, int(port), msg.__dict__))
+                if host == self.host and int(port) == self.port:
+                    continue
+                asyncio.create_task(send_message(host, int(port), payload))
 
             print(f"[{self.node_id}] Sensor update: {value:.2f}")
             await asyncio.sleep(5)  # every 5 seconds
@@ -76,6 +72,11 @@ class Node:
         if "leader_id" in msg and "term" in msg and "value" not in msg:
             leader_id = msg["leader_id"]
             term = msg["term"]
+
+            # Ignore our own heartbeat
+            if leader_id == self.node_id:
+                return
+
             if term >= self.term:
                 if self.role != ROLE_FOLLOWER:
                     print(f"[{self.node_id}] -> FOLLOWER due to heartbeat from {leader_id} term={term} (prev role={self.role})")
@@ -83,9 +84,8 @@ class Node:
                 self.term = term
                 self.voted_for = None
                 self.last_heartbeat = time.time()
-                self.election_timeout = random_timeout(2.0, 1.5)
+                self.election_timeout = random_timeout(2.5, 2.0)
             else:
-                # Ignore stale heartbeat
                 print(f"[{self.node_id}] Ignoring stale heartbeat from {leader_id} term={term} < local term={self.term}")
             return
 
@@ -93,62 +93,116 @@ class Node:
         if "candidate_id" in msg and "term" in msg and "granted" not in msg:
             candidate_id = msg["candidate_id"]
             term = msg["term"]
+            candidate_host = msg.get("candidate_host")
+            candidate_port = int(msg.get("candidate_port", 0))
 
-            grant = False
+            # Step down if term is higher
             if term > self.term:
-                # Newer term: become follower and consider vote
+                if self.role != ROLE_FOLLOWER:
+                    print(f"[{self.node_id}] -> FOLLOWER due to RequestVote from {candidate_id} term={term} (prev role={self.role})")
                 self.role = ROLE_FOLLOWER
                 self.term = term
                 self.voted_for = None
 
-            # Grant if: candidate’s term >= ours and we haven’t voted this term
-            if term >= self.term and (self.voted_for is None or self.voted_for == candidate_id):
+            grant = False
+            if term == self.term and (self.voted_for is None or self.voted_for == candidate_id):
                 grant = True
                 self.voted_for = candidate_id
                 self.last_heartbeat = time.time()
-                self.election_timeout = random_timeout(2.0, 1.5)
+                self.election_timeout = random_timeout(2.5, 2.0)
 
-            # Send vote response
+            # Reply directly to candidate if address provided; otherwise broadcast (fallback)
             response = vote_response(voter_id=self.node_id, term=self.term, granted=grant)
-            for peer in self.peers:
-                host, port = peer.split(":")
-                if host == self.host and int(port) == self.port:
-                    continue
-                # send back directly to candidate if you prefer, but we broadcast for simplicity
-                asyncio.create_task(send_message(host, int(port), response))
+            if candidate_host and candidate_port:
+                asyncio.create_task(send_message(candidate_host, candidate_port, response))
+            else:
+                for peer in self.peers:
+                    host, port = peer.split(":")
+                    if host == self.host and int(port) == self.port:
+                        continue
+                    asyncio.create_task(send_message(host, int(port), response))
 
-            print(f"[{self.node_id}] Vote {'granted' if grant else 'denied'} for {candidate_id} (term={term}, local term={self.term}, voted_for={self.voted_for})")
+            print(f"[{self.node_id}] Vote {'granted' if grant else 'denied'} for {candidate_id} (incoming term={term}, local term={self.term}, voted_for={self.voted_for})")
             return
 
         # VoteResponse
         if "voter_id" in msg and "granted" in msg and "term" in msg:
-            # In Part 5B we’ll use this to count votes if we’re a candidate.
-            # For now, just log.
-            print(f"[{self.node_id}] Received vote response from {msg['voter_id']}: granted={msg['granted']} term={msg['term']}")
+            voter_id = msg["voter_id"]
+            granted = msg["granted"]
+            term = msg["term"]
+
+            # Higher-term response -> step down
+            if term > self.term:
+                if self.role != ROLE_FOLLOWER:
+                    print(f"[{self.node_id}] Step down: higher term in vote response (term={term} > local={self.term})")
+                self.role = ROLE_FOLLOWER
+                self.term = term
+                self.voted_for = None
+                self.last_heartbeat = time.time()
+                self.election_timeout = random_timeout(2.5, 2.0)
+                return
+
+            if self.role == ROLE_CANDIDATE and term == self.term and granted:
+                self.votes_received.add(voter_id)
+                total_nodes = len(self.peers) + 1  # self + peers
+                majority = len(self.votes_received) > total_nodes // 2
+                print(f"[{self.node_id}] Vote from {voter_id}: granted={granted}. Tally={len(self.votes_received)}/{total_nodes} (term={self.term})")
+
+                if majority and self.role == ROLE_CANDIDATE:
+                    self.role = ROLE_LEADER
+                    self.last_heartbeat = time.time()  # prevent immediate timeout
+                    print(f"[{self.node_id}] Became LEADER for term {self.term}")
+                    asyncio.create_task(self.leader_heartbeat_loop())
             return
 
         # Unknown message type
         print(f"[{self.node_id}] Unrecognized message: {msg}")
-
 
     async def leader_heartbeat_loop(self):
         while not self._stop.is_set() and self.role == ROLE_LEADER:
             hb = heartbeat(leader_id=self.node_id, term=self.term)
             for peer in self.peers:
                 host, port = peer.split(":")
+                # Skip self
+                if host == self.host and int(port) == self.port:
+                    continue
                 asyncio.create_task(send_message(host, int(port), hb))
+
             print(f"[{self.node_id}] Heartbeat (term={self.term})")
+            self.last_heartbeat = time.time()  # refresh so watchdog doesn’t fire
             await asyncio.sleep(1.0)
 
 
     async def election_watchdog(self):
         while not self._stop.is_set():
             elapsed = time.time() - self.last_heartbeat
-            if elapsed > self.election_timeout and self.role != ROLE_LEADER:
-                # We’ll transition to candidate and start election in Part 4.
-                # For now, just log and refresh timeout so you can see the timing behavior.
-                print(f"[{self.node_id}] Election timeout elapsed ({elapsed:.2f}s). Role={self.role}, term={self.term}")
-                self.election_timeout = random_timeout(2.0, 1.5)
-                # Next step: self.start_election()
-            await asyncio.sleep(0.2)
 
+            # Only followers can trigger elections
+            if self.role == ROLE_FOLLOWER and elapsed > self.election_timeout:
+                print(f"[{self.node_id}] Election timeout ({elapsed:.2f}s). Starting election.")
+                await self.start_election()
+
+            # Candidates wait for votes; leaders send heartbeats separately
+            await asyncio.sleep(0.2)
+    async def start_election(self):
+        # Transition to candidate
+        self.role = ROLE_CANDIDATE
+        self.term += 1
+        self.voted_for = self.node_id
+        self.votes_received = {self.node_id}  # vote for self
+        self.election_timeout = random_timeout(2.5, 2.0)
+
+        print(f"[{self.node_id}] Starting election for term {self.term}")
+
+        # Broadcast RequestVote to peers (skip self)
+        rv = request_vote(
+            candidate_id=self.node_id,
+            term=self.term,
+            candidate_host=self.host,
+            candidate_port=self.port,
+        )
+        for peer in self.peers:
+            host, port = peer.split(":")
+            if host == self.host and int(port) == self.port:
+                continue
+            asyncio.create_task(send_message(host, int(port), rv))

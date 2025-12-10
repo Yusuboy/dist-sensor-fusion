@@ -10,10 +10,10 @@ async def main():
     node = Node(node_id=node_id, host="127.0.0.1", port=port, peers=peers)
 
     # Force A to act as leader for demo
-    if node_id == "A":
-        node.role = "leader"
-        node.term = 1
-        asyncio.create_task(node.leader_heartbeat_loop())
+    # if node_id == "A":
+    #     node.role = "leader"
+    #     node.term = 1
+    #     asyncio.create_task(node.leader_heartbeat_loop())
 
     await node.start()
 
