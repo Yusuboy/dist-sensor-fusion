@@ -66,12 +66,17 @@ class Node:
 
         self.events = []  # dashboard log queue
         self.is_alive = True  # dashboard health flag
+
+        self.control_port = self.port + 1000  # example: node A: 9000 → control at 10000
+
     # ----------------------------------------------------------------------
     # STARTUP & HANDSHAKE
     # ----------------------------------------------------------------------
     async def start(self):
         self._server = Server(self.host, self.port, self.handle_message)
         asyncio.create_task(self._server.start())
+        asyncio.create_task(self.control_server())
+
         self.record_event("Waiting for cluster handshakes…")
 
         print(f"Node {self.node_id} waiting for cluster handshakes…")
@@ -99,6 +104,42 @@ class Node:
         self.is_alive = False
         self.record_event("Node shutting down")
         self._stop.set()
+
+
+    async def control_server(self):
+        """Listen for external commands like KILL."""
+        control_port = self.port + 1000  # e.g. node on 9000 → control on 10000
+
+        server = await asyncio.start_server(self.handle_control, self.host, control_port)
+        print(f"[{self.node_id}] Control server on {self.host}:{control_port}")
+
+        async with server:
+            await server.serve_forever()
+
+    async def handle_control(self, reader, writer):
+        try:
+            msg = (await reader.read(100)).decode().strip()
+        except:
+            writer.close()
+            return
+
+        if msg == "KILL":
+            print(f"[{self.node_id}] Received external KILL → shutting down")
+            self.stop()
+
+        writer.close()
+        await writer.wait_closed()
+
+
+    async def handle_control(self, reader, writer):
+        msg = (await reader.read(100)).decode().strip()
+
+        if msg == "KILL":
+            print(f"[{self.node_id}] received external kill command")
+            self.stop()
+
+        writer.close()
+        await writer.wait_closed()
 
 
 
@@ -415,3 +456,4 @@ class Node:
             self.record_event(f"Heartbeat sent (term {self.term})")
 
             await asyncio.sleep(1.0)
+
