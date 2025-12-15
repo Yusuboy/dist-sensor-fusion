@@ -14,57 +14,34 @@ classDef traffic stroke-dasharray: 4 4,color:#444;
 %% ==========================
 subgraph SENSORS ["Sensor Inputs"]
 direction LR
-    S1["Sensor A"]:::sensor
-    S2["Sensor B"]:::sensor
-    S3["Sensor C"]:::sensor
+    S1["Local Sensor Reading A"]:::sensor
+    S2["Local Sensor Reading B"]:::sensor
+    S3["Local Sensor Reading C"]:::sensor
 end
 
 %% ==========================
-%% MIDDLE LAYER — CLUSTER
+%% CLUSTER
 %% ==========================
-subgraph CLUSTER ["Sensor Gateway Cluster (3-node ring)"]
+subgraph CLUSTER ["Sensor Gateway Cluster"]
 direction LR
-    A["Node A"]:::node
-    B["Node B"]:::node
-    C["Node C"]:::node
+    A["Node A\n(Follower)"]:::node
+    B["Node B\n(Leader)"]:::leader
+    C["Node C\n(Follower)"]:::node
 end
 
-%% SENSOR → NODE MAPPING
+%% SENSOR → NODE
 S1 --> A
 S2 --> B
 S3 --> C
 
-%% NODE INTERLINKS (Physical / Sync)
-A --- B
-B --- C
-C --- A
-
-%% Logical / Protocol Paths
+%% CONTROL PLANE (ELECTION / HEARTBEATS)
 A -. "JSON/TCP" .- B:::traffic
 B -. "JSON/TCP" .- C:::traffic
 C -. "JSON/TCP" .- A:::traffic
 
-%% ==========================
-%% BOTTOM LAYER — LEADER
-%% ==========================
-subgraph CONTROL ["Leader Coordination Layer"]
-direction TB
-    L["Leader Role"]:::leader
-end
-
-L -->|Heartbeat / Checkpoints| A
-L -->|Heartbeat / Checkpoints| B
-L -->|Heartbeat / Checkpoints| C
-
-%% ==========================
-%% STATE PROPAGATION
-%% ==========================
-A -->|STATE_UPDATE| B
-A -->|STATE_UPDATE| C
-B -->|STATE_UPDATE| A
-B -->|STATE_UPDATE| C
-C -->|STATE_UPDATE| A
-C -->|STATE_UPDATE| B
+%% DATA / STATE FLOW
+B -->|Heartbeat + Fused State| A
+B -->|Heartbeat + Fused State| C
 
 
 ```
