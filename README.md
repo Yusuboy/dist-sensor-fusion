@@ -35,9 +35,9 @@ This project demonstrates core distributed systems concepts:
 - `VOTE_RESPONSE` – Peer grants or denies a vote  
 - `HEARTBEAT` – Leader liveness + state update  
 - `SENSOR_UPDATE` – Local sensor reading sent to peers  
-- `HELLO / HELLO_ACK` – Handshake barrier to prevent early elections  
+- `HELLO / HELLO_ACK` – Handshake barrier to prevent early elections
 
-These match the actual project functionality.
+- [Diagrams](docks/architecture)
 
 ---
 
