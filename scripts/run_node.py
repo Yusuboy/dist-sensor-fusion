@@ -1,6 +1,7 @@
 import asyncio
 import sys
 from src.core.node import Node
+from src.ui.dashboard import run_dashboard   # <- NEW
 
 async def main():
     node_id = sys.argv[1]
@@ -9,13 +10,14 @@ async def main():
 
     node = Node(node_id=node_id, host="127.0.0.1", port=port, peers=peers)
 
-    # Force A to act as leader for demo
-    # if node_id == "A":
-    #     node.role = "leader"
-    #     node.term = 1
-    #     asyncio.create_task(node.leader_heartbeat_loop())
+    # Start node logic (handshake, sensor loop, election, etc.)
+    asyncio.create_task(node.start())
 
-    await node.start()
+    # Start dashboard in parallel
+    asyncio.create_task(run_dashboard(node))
+
+    # Keep main alive forever
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
     asyncio.run(main())
