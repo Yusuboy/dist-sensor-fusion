@@ -72,7 +72,7 @@ This process is visible during the demo.
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/Yusuboy/dist-sensor-fusion
+git@github.com:Yusuboy/dist-sensor-fusion.git
 
 cd dist-sensor-fusion
 ```
